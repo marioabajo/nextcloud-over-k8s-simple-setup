@@ -84,16 +84,43 @@ kubectl taint node test node-role.kubernetes.io/control-plane-
   - Now we can deploy applications in kubernetes, simple test:
 ```
 kubectl create deployment kubernetes-bootcamp --image=gcr.io/google-samples/kubernetes-bootcamp:v1
-kubectl get pods -w
+kubectl get pods
 kubectl rollout status deployment kubernetes-bootcamp
 kubectl exec -ti deployment/kubernetes-bootcamp -- /bin/bash
 ```
-- In order to not deal with modifying lot of yaml files for the deployments we will use HELM, think of it as a kind of repository with yaml templates for products + Jinja like variable substitution so it is easy to deploy an application with one command already configured for your environment:
+  - Once we have finished playing with that recently creted pod we can remove it:
+```
+kubectl delete deployment kubernetes-bootcamp
+```
+
+At this point we have a working kubernetes, it has the bareminimum and there are things (like metrics) that wont work yet because we don't have yet the neccesary "plugins" installed.
+We can now start installing our application.
+
+- In order to not deal with modifying lot of yaml files for the deployments we will use HELM, think of it as a kind of repository with yaml templates for products + Jinja like variable substitution so it is easy to deploy an application with one command already configured for your environment. Please follow this simple instrunctions to install helm:
   https://helm.sh/docs/intro/install/
   This is client, so install it in the host/s from where you want to control de cluster:
 
-
-
-- For our applications we will need storage... but we are lazy so we want the storage to be managed by kubernetes, we want it to be dynamic, isolated (from the rest of containers, what about LVM volumes?)... we are in a single node deployment... looks like a good place to try "topolvm" a simple lvm provisioner for kubernetes
-
-
+- For our applications we will need storage... but we are lazy so we want the storage to be managed by kubernetes, we want it to be dynamic, isolated (from the rest of containers, what about LVM volumes?)... we are in a single node deployment... looks like a good place to try "topolvm" a simple lvm provisioner for kubernetes, but before installing it, as a dependcy, we need to install "cert-manager":
+```
+helm repo add jetstack https://charts.jetstack.io --force-update
+helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --version v1.16.2 --set crds.enabled=true --set resources.requests.cpu=10m,resources.requests.memory=32Mi,resources.limits.cpu=1,resources.limits.memory=128Mi --set webhook.resources.requests.cpu=10m,webhook.resources.requests.memory=32Mi,webhook.resources.limits.cpu=1,webhook.resources.limits.memory=128Mi --set cainjector.resources.requests.cpu=10m,cainjector.resources.requests.memory=32Mi,cainjector.resources.limits.cpu=1,cainjector.resources.limits.memory=128Mi --set 'extraArgs={--dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53}'
+```
+- Now lets install `topo-lvm`:
+  First we need to add th erepositorty and create the namespace for it:
+```
+kubectl create ns topolvm-system
+helm repo add topolvm https://topolvm.github.io/topolvm
+helm repo update
+```
+  The configuration options for this package can be downloaded for review using this command:
+```
+helm show values topolvm/topolvm | tee topolvm-values.yaml
+```
+  For example my file with the parameters i use is in the repository as `topolvm-values.yaml`
+  
+  And now lets add a pair of label to two namesapace to avoid the topolvm webhook from getting stuck ([more info here](https://github.com/topolvm/topolvm/blob/main/docs/getting-started.md#install-instructions)) and finally install topolvm:
+```
+kubectl label namespace topolvm-system topolvm.io/webhook=ignore
+kubectl label namespace kube-system topolvm.io/webhook=ignore
+helm install --namespace=topolvm-system topolvm topolvm/topolvm -f topolvm-values.yaml
+```
