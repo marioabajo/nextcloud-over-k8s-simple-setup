@@ -1,0 +1,21 @@
+controller:
+  ingressClassResource:
+    enabled: true
+  hostNetwork: true
+  kind: DaemonSet
+  daemonset:
+    useHostPort: true
+    hostPorts:
+      http: 80
+      https: 443
+  containerPorts:
+    http: 80
+    https: 443
+  service:
+    httpPorts:
+      - port: 80
+        targetPort: http
+    httpsPorts:
+      - port: 443
+        targetPort: https
+
